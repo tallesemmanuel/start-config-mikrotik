@@ -1,0 +1,115 @@
+#Nomeando as interfaces
+/interface 
+ethernet set ether1 name=WAN
+ethernet set ether2 name=OPT
+ethernet set ether3 name=LAN
+ethernet set ether4 name=LAN1
+ethernet set ether5 name=LAN2
+
+#Criando uma lista de interfaces
+/interface list 
+add name=list_interfaces
+add name=list_wan
+
+#Adicionando interfaces a lista
+/interface list member
+add list=list_interfaces interface=LAN
+add list=list_interfaces interface=LAN1
+add list=list_interfaces interface=LAN2
+add list=list_wan interface=WAN
+
+#Criando o bonding e adicionando as interfaces ao bonding
+/interface bonding
+add mode=802.3ad name=lagg_bond slaves=LAN,LAN1,LAN2
+#Criando o bridge e adicionando o bonding ao bridge
+/interface bridge
+add name=bridge_lagg
+#Adicionando o bridge as portas
+/interface bridge port
+add bridge=bridge_lagg interface=lagg_bond
+
+#Criando as VLANs 
+/interface vlan
+add name=vlan_1 vlan-id=10 interface=bridge_lagg disabled=no
+add name=vlan_2 vlan-id=20 interface=bridge_lagg disabled=no
+add name=vlan_3 vlan-id=30 interface=bridge_lagg disabled=no
+add name=vlan_4 vlan-id=40 interface=bridge_lagg disabled=no
+add name=vlan_5 vlan-id=50 interface=bridge_lagg disabled=no
+add name=vlan_6 vlan-id=60 interface=bridge_lagg disabled=no
+
+#Adicionando as VLANs aos endereços IP
+/ip address 
+add address=10.16.0.2/24 interface=vlan_1
+add address=10.16.1.2/24 interface=vlan_2
+add address=10.16.2.2/24 interface=vlan_3
+add address=10.16.3.2/24 interface=vlan_4
+add address=10.16.4.2/24 interface=vlan_5
+add address=10.16.5.2/24 interface=vlan_6
+add address=10.16.10.2/24 interface=lagg_bond
+
+#Adicionando a interface WAN para o DHCP
+/ip dhcp-client 
+add disabled=no interface=WAN
+
+#Criando os pools do dhcp
+/ip pool
+add name=pool_vlan_1 ranges=10.16.0.10-10.16.0.15
+add name=pool_vlan_2 ranges=10.16.1.20-10.16.1.25
+add name=pool_vlan_3 ranges=10.16.2.30-10.16.2.35
+add name=pool_vlan_4 ranges=10.16.3.40-10.16.3.45
+add name=pool_vlan_5 ranges=10.16.4.50-10.16.4.55
+add name=pool_vlan_6 ranges=10.16.5.50-10.16.5.65
+
+#Adicionando os pools do DHCP para cada vlan criada
+/ip dhcp-server
+add address-pool=pool_vlan_1 disabled=no interface=vlan_1 name=dhcp_vlan_1
+add address-pool=pool_vlan_2 disabled=no interface=vlan_2 name=dhcp_vlan_2
+add address-pool=pool_vlan_3 disabled=no interface=vlan_3 name=dhcp_vlan_3
+add address-pool=pool_vlan_4 disabled=no interface=vlan_4 name=dhcp_vlan_4
+add address-pool=pool_vlan_5 disabled=no interface=vlan_5 name=dhcp_vlan_5
+add address-pool=pool_vlan_6 disabled=no interface=vlan_6 name=dhcp_vlan_6
+
+#Criando as netorks de cada dhcp
+/ip dhcp-server network
+add address=10.16.0.0/24 comment=dhcp_vlan_1 gateway=10.16.0.2
+add address=10.16.1.0/24 comment=dhcp_vlan_2 gateway=10.16.1.2
+add address=10.16.2.0/24 comment=dhcp_vlan_3 gateway=10.16.2.2
+add address=10.16.3.0/24 comment=dhcp_vlan_4 gateway=10.16.3.2
+add address=10.16.4.0/24 comment=dhcp_vlan_5 gateway=10.16.4.2
+add address=10.16.5.0/24 comment=dhcp_vlan_6 gateway=10.16.5.2
+
+#Criando servidores de DNS
+/ip dns 
+set servers=8.8.8.8
+set servers=208.67.222.222
+
+#Criando o usuario user
+/user 
+add name=user password=sua_senha group=full
+
+#Criando regras de firewall
+/ip firewall filter
+add chain=input connection-state=established,related action=accept comment="accept established,related";
+add chain=input connection-state=invalid action=drop;
+add chain=input in-interface=WAN protocol=icmp action=accept comment="allow ICMP";
+add chain=input in-interface=WAN protocol=tcp port=8291 action=accept comment="allow Winbox";
+add chain=input in-interface=WAN protocol=tcp port=22 action=accept comment="allow SSH";
+add chain=input in-interface=WAN action=drop comment="block everything else";
+
+#Criando Regras de NAT
+/ip firewall nat
+add chain=srcnat out-interface=WAN action=masquerade
+
+#Desabilitando servicos desnecessarios
+/ip service 
+disable telnet,ftp,www,api
+
+#Configurando o SNMP para a community gmt
+/snmp community 
+add address=0.0.0.0/0 name=gmt write-access=yes
+/snmp
+set contact=contato enable=yes location=local engine-id=default trap-community=gmt
+
+#Configurando o NTP Client
+/system ntp client
+set enabled=yes	primary-ntp=201.49.148.135 secondary-ntp=200.186.125.195
